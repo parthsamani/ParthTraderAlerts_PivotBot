@@ -1,6 +1,10 @@
 import logging
+import os
+import threading
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
+
+from flask import Flask
 
 from telegram import Update
 from telegram.ext import (
@@ -20,11 +24,53 @@ from config import (
 from data import get_all_market_data
 
 
+# ==========================================================
+# LOGGING
+# ==========================================================
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
+
+# ==========================================================
+# FLASK WEB SERVER
+# ==========================================================
+
+web_app = Flask(__name__)
+
+
+@web_app.route("/")
+def home():
+
+    return "ParthTraderAlerts Pivot Bot is Running!"
+
+
+@web_app.route("/health")
+def health():
+
+    return "OK"
+
+
+def run_web_server():
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
+    )
+
+    web_app.run(
+        host="0.0.0.0",
+        port=port
+    )
+
+
+# ==========================================================
+# CREATE PIVOT MESSAGE
+# ==========================================================
 
 def create_pivot_message():
 
@@ -70,7 +116,7 @@ def create_pivot_message():
 
             f"📊 <b>CPR</b>\n"
             f"TC: {cpr['TC']}\n"
-            f"BC: {cpr['BC']}\n"
+            f"BC: {cpr['BC']}\n\n"
 
             "━━━━━━━━━━━━━━━━━━\n\n"
         )
@@ -83,7 +129,13 @@ def create_pivot_message():
     return message
 
 
-async def send_pivot_message(context: ContextTypes.DEFAULT_TYPE):
+# ==========================================================
+# AUTOMATIC DAILY PIVOT MESSAGE
+# ==========================================================
+
+async def send_pivot_message(
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     try:
 
@@ -106,6 +158,10 @@ async def send_pivot_message(context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# ==========================================================
+# /START COMMAND
+# ==========================================================
+
 async def start_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -119,6 +175,10 @@ async def start_command(
     )
 
 
+# ==========================================================
+# /PIVOT COMMAND
+# ==========================================================
+
 async def pivot_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -131,6 +191,10 @@ async def pivot_command(
         parse_mode="HTML"
     )
 
+
+# ==========================================================
+# /HELP COMMAND
+# ==========================================================
 
 async def help_command(
     update: Update,
@@ -147,6 +211,10 @@ async def help_command(
     )
 
 
+# ==========================================================
+# MAIN
+# ==========================================================
+
 def main():
 
     if not BOT_TOKEN:
@@ -161,6 +229,17 @@ def main():
             "CHAT_ID environment variable is missing"
         )
 
+
+    # Start Flask Web Server
+    web_thread = threading.Thread(
+        target=run_web_server,
+        daemon=True
+    )
+
+    web_thread.start()
+
+
+    # Create Telegram Application
     app = (
         Application
         .builder()
@@ -168,6 +247,8 @@ def main():
         .build()
     )
 
+
+    # Telegram Commands
     app.add_handler(
         CommandHandler(
             "start",
@@ -189,10 +270,13 @@ def main():
         )
     )
 
+
+    # Daily Schedule
     hour, minute = map(
         int,
         SEND_TIME.split(":")
     )
+
 
     app.job_queue.run_daily(
         send_pivot_message,
@@ -204,16 +288,23 @@ def main():
         name="daily_pivot_update"
     )
 
+
     logging.info(
         "ParthTraderAlerts Pivot Bot Started"
     )
 
     logging.info(
-        "Daily schedule: 09:15 AM IST"
+        "Daily Schedule: 09:15 AM IST"
     )
 
+
+    # Start Telegram Bot
     app.run_polling()
 
+
+# ==========================================================
+# RUN
+# ==========================================================
 
 if __name__ == "__main__":
 
